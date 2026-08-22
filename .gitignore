@@ -1,0 +1,18 @@
+# 보안: 절대 커밋 금지
+.env
+storage_state.json
+login_failed.png
+
+# 환경/빌드
+.venv/
+__pycache__/
+*.pyc
+
+# 대용량/개인 데이터
+hypeduck_audit/
+samples/
+downloads/
+*.png
+
+# 런타임
+logs/cron.lock

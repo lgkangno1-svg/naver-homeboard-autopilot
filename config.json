@@ -1,0 +1,38 @@
+{
+  "blog_id": "issuemans",
+  "topic": {
+    "name": "알뜰소비·생활절약",
+    "description": "절약 꿀팁, 알뜰살팁, 상품 리뷰, 지원금/할인 정보, 생활 정보. 기존 블로그(issuemans)의 주제 일관성 유지.",
+    "keywords": ["알뜰살팁", "절약", "생활꿀팁", "토스 특가", "최저가", "후기", "장보기", "정부지원금", "통신비 절약", "무료 체험"],
+    "image_style": "상품 썸네일, 영수증, 생활용품, 장보기 물품"
+  },
+  "posts_per_day": 4,
+  "publish_times": ["09:10", "12:30", "18:40", "21:20"],
+  "publish": true,
+  "format": {
+    "char_min": 1500,
+    "char_max": 2500,
+    "image_min": 4,
+    "image_max": 5,
+    "title_min": 22,
+    "title_max": 34
+  },
+  "watermark": {
+    "mode": "text",
+    "text": "tnfwod",
+    "text_color": [255, 255, 255],
+    "opacity": 0.45,
+    "position": "bottom-right",
+    "font_size_ratio": 0.035,
+    "background_strip": true,
+    "image_path": "watermark.png",
+    "image_scale_ratio": 0.18
+  },
+  "image_sources": ["toss_products", "wikimedia_commons", "openverse", "naver_shopping", "local_pool"],
+  "local_pool_dir": "images_pool",
+  "human_like": {
+    "type_delay_ms": [45, 160],
+    "action_delay_ms": [300, 1200],
+    "mouse_steps": [8, 25]
+  }
+}
