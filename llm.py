@@ -104,7 +104,7 @@ def chat_json(messages, max_tokens=6000, temperature=0.7, retries=2):
     raise RuntimeError(f"JSON 파싱 실패: {last}")
 
 
-def vision(image_b64_url, prompt, max_tokens=3000, temperature=0.2):
+def vision(image_b64_url, prompt, max_tokens=3000, temperature=0.2, timeout=240):
     """이미지 입력 (data:image/jpeg;base64,... 형식). ox-alpha만 비전 지원."""
     if not OPENROUTER_KEY:
         raise RuntimeError("비전은 OpenRouter 키 필요")
@@ -115,7 +115,7 @@ def vision(image_b64_url, prompt, max_tokens=3000, temperature=0.2):
               "messages": [{"role": "user", "content": [
                   {"type": "image_url", "image_url": {"url": image_b64_url}},
                   {"type": "text", "text": prompt}]}]},
-        timeout=240,
+        timeout=timeout,
     )
     r.raise_for_status()
     return (r.json()["choices"][0]["message"].get("content") or "").strip()

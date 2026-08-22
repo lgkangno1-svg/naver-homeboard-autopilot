@@ -336,10 +336,16 @@ def write_post(post, images, mode="publish"):
         if p:
             _insert_image(page, p)
 
+        def para_break(n=1):
+            """문단 사이 여백 (빈 줄 삽입으로 가독성 확보)"""
+            for _ in range(n):
+                page.keyboard.press("Enter")
+                time.sleep(random.uniform(0.08, 0.2))
+
         # 2) 인트로
         page.keyboard.press("Enter")
         _type_paragraphs(page, post.get("intro", []))
-        page.keyboard.press("Enter")
+        para_break(2)
 
         # 3) 섹션들
         for si, sec in enumerate(post.get("sections", [])):
@@ -355,7 +361,7 @@ def write_post(post, images, mode="publish"):
             page.keyboard.press("Control+b")
             time.sleep(0.1)
             _type_paragraphs(page, sec.get("paragraphs", []))
-            page.keyboard.press("Enter")
+            para_break(1)
             # 강조 문장 (굵게)
             if sec.get("emphasis"):
                 human_type(page, sec["emphasis"])
@@ -363,14 +369,13 @@ def write_post(post, images, mode="publish"):
                 page.keyboard.press("Shift+End")
                 page.keyboard.press("Control+b")
                 page.keyboard.press("End")
-                page.keyboard.press("Enter")
+                para_break(1)
                 time.sleep(0.15)
                 page.keyboard.press("Control+b")
             # 중앙정렬 한 줄들 (섹션 중 1곳)
             if sec.get("centered_lines"):
                 _toolbar_click(page, ["가운데"])
                 _type_paragraphs(page, sec["centered_lines"])
-                _toolbar_click(page, ["가운데"])  # 해제 시도
                 page.keyboard.press("Enter")
             # 섹션 사이 이미지
             if si < len(post.get("sections", [])) - 1:
@@ -378,10 +383,18 @@ def write_post(post, images, mode="publish"):
                 if p:
                     _insert_image(page, p)
                 else:
-                    page.keyboard.press("Enter")
+                    para_break(2)
 
         # 4) 결말
         _type_paragraphs(page, post.get("conclusion", []))
+
+        # 5) 전체 가운데정렬 (읽기 편한 홈판 스타일)
+        _sleep(400, 900)
+        page.keyboard.press("Control+a")
+        time.sleep(0.4)
+        _toolbar_click(page, ["가운데 정렬", "가운데정렬", "가운데"], fallback_keys=["Control+Shift+e"])
+        time.sleep(0.5)
+        page.keyboard.press("Control+End")
 
         _sleep(800, 1600)
         result = {"mode": mode, "title": post["title"]}

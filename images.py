@@ -10,7 +10,7 @@
 워터마크 (config.watermark):
   mode: text | image | both | none
 """
-import hashlib, io, json, os, random, sys, time
+import base64, hashlib, io, json, os, random, sys, time
 
 import requests
 from PIL import Image, ImageDraw, ImageFont, ImageEnhance
@@ -194,7 +194,37 @@ def _toss_products(query, want=6):
     return [p["image"] for p in scored[:want]]
 
 
+def _pixabay_urls(query, want=6):
+    """Pixabay API (상업적 사용 무료 라이선스). 한국어 쿼리는 영어 번역 후 검색."""
+    key = _load_cfg().get("pixabay_key") or os.getenv("PIXABAY_KEY", "")
+    if not key:
+        return []
+    try:
+        q = query
+        # 한국어면 영어로 변환해 검색 히트율 상승
+        if any("가" <= ch <= "힣" for ch in q):
+            q = _to_en(query)
+        r = requests.get("https://pixabay.com/api/", params={
+            "key": key, "q": q, "image_type": "photo",
+            "orientation": "horizontal", "min_width": 800, "per_page": want * 2,
+            "safesearch": "true",
+        }, timeout=20)
+        if r.status_code != 200:
+            print("  pixabay 실패:", r.status_code)
+            return []
+        out = []
+        for h in r.json().get("hits", []):
+            u = h.get("largeImageURL") or h.get("webformatURL")
+            if u and h.get("imageWidth", 0) >= 700:
+                out.append(u)
+        return out[:want]
+    except Exception as e:
+        print("  pixabay 실패:", str(e)[:80])
+        return []
+
+
 SOURCES = {
+    "pixabay": _pixabay_urls,
     "wikimedia_commons": _commons_urls,
     "openverse": _openverse_urls,
     "naver_shopping": _naver_shopping_urls,
@@ -285,6 +315,32 @@ def process(im, cfg):
 
 _EN_CACHE = {}
 
+_VISION_BUDGET = {"n": 0}
+
+
+def _is_relevant(jpeg_bytes, query):
+    """ox-alpha 비전으로 이미지-쿼리 관련성 확인 (포스트당 최대 8회, 90초 초과 시 통과)."""
+    if _VISION_BUDGET["n"] >= 8:
+        return True
+    _VISION_BUDGET["n"] += 1
+    try:
+        import llm
+        b64 = base64.b64encode(jpeg_bytes).decode()
+        out = llm.vision(
+            f"data:image/jpeg;base64,{b64}",
+            f"이 사진이 '{query}'라는 주제와 관련이 있으면 yes, 없으면 no만 출력해.",
+            max_tokens=3000, timeout=90)
+        o = out.strip().lower()
+        if "yes" in o:
+            return True
+        if "no" in o or "없" in o or "아니" in o:
+            return False
+        print(f"  관련성 판정 불명확('{out[:30]}') → 통과")
+        return True
+    except Exception as e:
+        print("  관련성 확인 실패(통과 처리):", str(e)[:100])
+        return True
+
 
 def _to_en(query):
     """한국어 쿼리를 영어 이미지 검색용으로 변환 (캐시). 실패 시 원본 반환."""
@@ -307,8 +363,10 @@ def _to_en(query):
 def fetch_images(queries, count, tag="post"):
     """쿼리 리스트 순서대로 count장 확보. 한국어 쿼리가 안 통하면 영어 번역으로 재시도."""
     cfg = _load_cfg()
-    sources = [s for s in cfg.get("image_sources", ["wikimedia_commons"]) if s in SOURCES]
+    sources = [s for s in cfg.get("image_sources", ["pixabay"]) if s in SOURCES]
+    rel_check = cfg.get("image_relevance_check", True)
     got, seen = [], set()
+    _VISION_BUDGET["n"] = 0
 
     def try_query(q):
         urls = []
@@ -327,7 +385,11 @@ def fetch_images(queries, count, tag="post"):
             im = _download(u) if str(u).startswith("http") else Image.open(u).convert("RGB")
             if im is None:
                 continue
-            got.append((q, process(im, cfg)))
+            data = process(im, cfg)
+            if rel_check and not _is_relevant(data, q):
+                print(f"  관련성 낮음 → 제외 ({q})")
+                continue
+            got.append((q, data))
             time.sleep(random.uniform(0.4, 1.2))
 
     for q in queries:

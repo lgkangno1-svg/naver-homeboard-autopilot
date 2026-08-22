@@ -28,7 +28,9 @@
     "image_path": "watermark.png",
     "image_scale_ratio": 0.18
   },
-  "image_sources": ["toss_products", "wikimedia_commons", "openverse", "naver_shopping", "local_pool"],
+  "pixabay_key": "31719641-17d3559b364a8ac4cc8f2a164",
+  "image_relevance_check": true,
+  "image_sources": ["pixabay", "naver_shopping", "toss_products", "openverse", "wikimedia_commons", "local_pool"],
   "local_pool_dir": "images_pool",
   "human_like": {
     "type_delay_ms": [45, 160],
