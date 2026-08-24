@@ -9,7 +9,7 @@
   "posts_per_day": 4,
   "publish_times": ["09:10", "12:30", "18:40", "21:20"],
   "schedule_jitter_minutes": 18,
-  "publish": true,
+  "publish": false,
   "format": {
     "char_min": 1500,
     "char_max": 2500,
