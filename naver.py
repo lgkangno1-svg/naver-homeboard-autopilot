@@ -501,8 +501,14 @@ def write_post(post, images, mode="publish"):
         return result
     finally:
         _sleep(500, 1000)
-        browser.close()
-        pw.stop()
+        try:
+            browser.close()
+        except Exception:
+            pass
+        try:
+            pw.stop()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
