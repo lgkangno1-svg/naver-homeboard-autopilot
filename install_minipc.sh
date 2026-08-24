@@ -17,7 +17,18 @@ if [ ! -f .env ]; then
 fi
 
 CRON_LINE="*/5 * * * * cd $BASE && HEADLESS=1 .venv/bin/python -u run.py cron >> $BASE/logs/cron.log 2>&1"
-( crontab -l 2>/dev/null | grep -v "run.py cron" || true; echo "$CRON_LINE" ) | crontab -
+AUDIT_LINE="35 2 * * * cd $BASE && HEADLESS=1 .venv/bin/python -u run.py audit >> $BASE/logs/audit.log 2>&1"
+(
+  crontab -l 2>/dev/null \
+    | grep -v "run.py cron" \
+    | grep -v "run.py audit" \
+    | grep -v '^CRON_TZ=Asia/Seoul$' \
+    || true
+  echo "CRON_TZ=Asia/Seoul"
+  echo "$CRON_LINE"
+  echo "$AUDIT_LINE"
+) | crontab -
 
 echo "Installed. First verify: .venv/bin/python run.py check"
+echo "Nightly quality feedback audit is scheduled for 02:35 KST."
 echo "For first interactive login, run on a machine with a visible browser: .venv/bin/python run.py login"
