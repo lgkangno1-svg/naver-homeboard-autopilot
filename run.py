@@ -144,12 +144,12 @@ def daily():
         time.sleep(30)
 
 
-def _today_slot_count():
-    return publish_guard.today_slot_count()
+def _today_slot_count(mode):
+    return publish_guard.today_slot_count(mode=mode)
 
 
 def cron():
-    """Process at most one due slot. Drafts never count as published slots."""
+    """Process at most one due slot. Drafts and published posts are counted separately."""
     if os.path.exists(LOCK):
         age = time.time() - os.path.getmtime(LOCK)
         if age < 3600:
@@ -161,7 +161,8 @@ def cron():
     try:
         times = _publish_times()
         now = datetime.now(KST)
-        done = _today_slot_count()
+        target_mode = "publish" if CFG.get("publish") else "draft"
+        done = _today_slot_count(target_mode)
         due = []
         for t in times:
             h, m = map(int, t.split(":"))
@@ -172,7 +173,7 @@ def cron():
         if need <= 0:
             return
         slot_id = f"{now:%Y-%m-%d}T{due[min(done, len(due)-1)]}"
-        make_and_publish(mode=None if CFG.get("publish") else "draft", slot_id=slot_id)
+        make_and_publish(mode=None if target_mode == "publish" else "draft", slot_id=slot_id)
     finally:
         try:
             os.remove(LOCK)
