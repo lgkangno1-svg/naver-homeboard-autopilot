@@ -1,12 +1,4 @@
 playwright>=1.45
-requests
-python-dotenv
-openai
-python-docx
-pillow
-numpy
-winrt-runtime
-winrt-Windows.Media.Ocr
-winrt-Windows.Globalization
-winrt-Windows.Storage.Streams
-winrt-Windows.Graphics.Imaging
+requests>=2.31
+python-dotenv>=1.0
+pillow>=10.0
