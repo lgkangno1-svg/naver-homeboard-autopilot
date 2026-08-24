@@ -1,18 +1,22 @@
-# 보안: 절대 커밋 금지
+# secrets/session
 .env
 storage_state.json
 login_failed.png
+publish_state.png
 
-# 환경/빌드
+# environment/build
 .venv/
 __pycache__/
 *.pyc
 
-# 대용량/개인 데이터
+# local data/assets
 hypeduck_audit/
 samples/
 downloads/
+images_pool/
 *.png
 
-# 런타임
+# runtime
+logs/*.jsonl
+logs/*.log
 logs/cron.lock
