@@ -1,0 +1,8 @@
+-r requirements.txt
+python-docx
+numpy
+winrt-runtime
+winrt-Windows.Media.Ocr
+winrt-Windows.Globalization
+winrt-Windows.Storage.Streams
+winrt-Windows.Graphics.Imaging
