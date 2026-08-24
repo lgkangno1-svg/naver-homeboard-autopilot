@@ -18,7 +18,9 @@ images_pool/
 
 # runtime
 logs/*.jsonl
+logs/*.json
 logs/*.log
 logs/cron.lock
 
-# OpenCode 내부 작업 폴더.omo/
+# OpenCode internal work folders
+.omo/

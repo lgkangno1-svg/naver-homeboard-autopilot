@@ -4,7 +4,8 @@
   "topic": {
     "name": "알뜰소비·생활절약",
     "description": "절약 꿀팁, 합리적 소비, 상품 비교, 지원금/할인 정보, 생활 정보. 기존 블로그(issuemans)의 주제 일관성을 유지한다.",
-    "keywords": ["알뜰살팁", "절약", "생활꿀팁", "토스 특가", "최저가", "후기", "장보기", "정부지원금", "통신비 절약", "무료 체험"],
+    "keywords": ["알뜰살팁", "절약", "생활꿀팁", "토스 특가", "최저가", "상품 비교", "구매 전 체크", "장보기", "정부지원금", "통신비 절약", "무료 체험 조건"],
+    "content_modes": ["비교·선택 기준", "실수 방지", "구매 전 체크", "변경사항 해설", "절약 체크리스트", "조건 확인 가이드", "가격 판단 기준"],
     "image_style": "생활용품, 장보기 물품, 서비스 사용 장면, 공식 상품 이미지"
   },
   "posts_per_day": 4,
@@ -19,10 +20,16 @@
     "title_min": 20,
     "title_max": 36
   },
+  "research": {
+    "max_sources": 12,
+    "official_search_for_high_stakes": true
+  },
   "quality": {
     "forbid_fabricated_experience": true,
-    "min_editor_score": 8.0,
-    "max_rewrites": 2
+    "min_editor_score": 8.2,
+    "max_rewrites": 2,
+    "max_recent_title_similarity": 0.72,
+    "min_official_sources_high_stakes": 1
   },
   "watermark": {
     "mode": "text",
