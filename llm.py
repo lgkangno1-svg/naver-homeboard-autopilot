@@ -154,11 +154,26 @@ def _json_candidates(text):
                 break
 
 
+def _resolve_role(messages, role):
+    """Send explicit scoring/fact-check prompts to the independent reviewer model."""
+    if role != "write":
+        return role
+    text = "\n".join(str(m.get("content", "")) for m in messages if isinstance(m, dict))
+    review_markers = (
+        "평가 항목:", "0~10", "unsupported_claims", "최근 실제 발행 글을 묶어서 평가",
+        "실제 발행된 글을 혹평", "채점합니다",
+    )
+    if sum(1 for marker in review_markers if marker in text) >= 2:
+        return "review"
+    return role
+
+
 def chat_json(messages, max_tokens=6000, temperature=0.7, retries=2, role="write"):
     last = None
     msgs = list(messages)
+    effective_role = _resolve_role(msgs, role)
     for _ in range(retries + 1):
-        out = chat(msgs, max_tokens=max_tokens, temperature=min(0.7, temperature), role=role)
+        out = chat(msgs, max_tokens=max_tokens, temperature=min(0.7, temperature), role=effective_role)
         parsed = None
         for candidate in _json_candidates(out):
             try:
