@@ -16,6 +16,7 @@ os.chdir(BASE)
 import images as imgmod
 import naver
 import publish_guard
+import quality_feedback
 import writer_v2 as writer
 
 CFG = json.load(open("config.json", encoding="utf-8"))
@@ -59,13 +60,21 @@ def make_and_publish(mode=None, slot_id=None):
     print("본문:", post.get("_chars"), "자 / 이미지 계획:", len(post.get("image_queries", [])), "장")
     quality = post.get("_quality", {})
     if quality:
-        print("품질:", quality.get("editor_scores", {}), "/ 근거 스니펫", quality.get("evidence_lines", 0), "줄")
+        print(
+            "품질:", quality.get("editor_scores", {}),
+            "/ 출처", quality.get("evidence_sources", 0),
+            "/ 공식", quality.get("official_sources", 0),
+            "/ 모드", quality.get("content_mode", "-"),
+        )
 
     n_img = min(len(post.get("image_queries", [])), CFG["format"]["image_max"])
     print("이미지 수집 중...")
     imgs = imgmod.fetch_images(post.get("image_queries", []), n_img)
     print(f"이미지 {len(imgs)}장 확보")
 
+    source_domains = list(dict.fromkeys(
+        x.get("domain") for x in post.get("_sources", []) if x.get("domain")
+    ))[:10]
     base_rec = {
         "title": post["title"],
         "mode": mode,
@@ -74,7 +83,9 @@ def make_and_publish(mode=None, slot_id=None):
         "chars": post.get("_chars"),
         "images": len(imgs),
         "angle": post.get("_angle", {}).get("angle"),
-        "quality": quality.get("editor_scores", {}),
+        "keyword": post.get("_angle", {}).get("keyword"),
+        "quality": quality,
+        "source_domains": source_domains,
     }
 
     # From here on, never blindly retry on an ambiguous outcome: the final click may have succeeded.
@@ -181,6 +192,16 @@ def cron():
             pass
 
 
+def audit():
+    """Re-read recent live posts and persist lessons for future generations."""
+    data = quality_feedback.refresh_live_feedback(CFG["blog_id"], limit=4)
+    print("라이브 품질 피드백 갱신 완료")
+    print("평균 점수:", data.get("aggregate_scores", {}))
+    for ins in data.get("instructions", [])[:5]:
+        print(" -", ins)
+    return data
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "once"
     if cmd == "login":
@@ -198,5 +219,7 @@ if __name__ == "__main__":
         daily()
     elif cmd == "cron":
         cron()
+    elif cmd == "audit":
+        audit()
     else:
         print(__doc__)
