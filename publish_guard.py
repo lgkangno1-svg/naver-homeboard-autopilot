@@ -42,13 +42,19 @@ def already_published(cid):
     return False
 
 
-def today_slot_count():
+def today_slot_count(mode="publish"):
+    """Count consumed schedule slots for the requested mode.
+
+    Publish mode counts published/verified/uncertain outcomes to avoid duplicate reposting.
+    Draft mode counts successful drafts so cron preview mode does not create endless drafts.
+    """
     today = datetime.now(KST).strftime("%Y-%m-%d")
+    valid = ("published", "verified", "uncertain") if mode == "publish" else ("draft",)
     seen = set()
     for rec in iter_log() or []:
-        if not rec.get("ts", "").startswith(today) or rec.get("mode") != "publish":
+        if not rec.get("ts", "").startswith(today) or rec.get("mode") != mode:
             continue
-        if rec.get("status") not in ("published", "verified", "uncertain"):
+        if rec.get("status") not in valid:
             continue
         seen.add(rec.get("slot_id") or rec.get("content_id") or rec.get("ts"))
     return len(seen)
