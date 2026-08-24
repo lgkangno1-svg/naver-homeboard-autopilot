@@ -349,8 +349,9 @@ def write_post(post, images, mode="publish"):
 
         # 3) 섹션들
         for si, sec in enumerate(post.get("sections", [])):
-            # 소제목 (굵게)
-            human_type(page, sec["heading"])
+            # 소제목 (굵게) — "1. " 류 번호 제거: 에디터 자동 목록 변환으로 텍스트 유실 방지
+            heading = re.sub(r"^\s*\d+[.．)]\s*", "", sec["heading"]).strip() or sec["heading"]
+            human_type(page, heading)
             page.keyboard.press("Home")
             page.keyboard.press("Shift+End")
             page.keyboard.press("Control+b")
@@ -388,7 +389,21 @@ def write_post(post, images, mode="publish"):
         # 4) 결말
         _type_paragraphs(page, post.get("conclusion", []))
 
-        # 5) 전체 가운데정렬 (읽기 편한 홈판 스타일)
+        # 5) 유실 검증: 에디터 텍스트가 기대 길이의 60% 미만이면 발행 중단 → 임시저장
+        _sleep(400, 800)
+        try:
+            editor_text = page.evaluate("""() => {
+                const main = document.querySelector('.se-main-container, .se-body');
+                return main ? main.innerText.length : 0;
+            }""")
+        except Exception:
+            editor_text = 0
+        expected = post.get("_chars", 1000)
+        if editor_text < expected * 0.6:
+            print(f"  [경고] 에디터 내용 {editor_text}자 < 기대 {expected}자의 60% — 유실 의심, 임시저장으로 전환")
+            mode = "draft"
+
+        # 6) 전체 가운데정렬 (읽기 편한 홈판 스타일)
         _sleep(400, 900)
         page.keyboard.press("Control+a")
         time.sleep(0.4)
@@ -403,12 +418,24 @@ def write_post(post, images, mode="publish"):
             human_click(page, btn)
             page.wait_for_timeout(3000)
             result["ok"] = True
+            result["saved_chars"] = editor_text
             print("임시저장 완료")
         else:
             btn = page.locator("[class*='publish_btn']").first
             human_click(page, btn)
             page.wait_for_timeout(2500)
-            # 발행 설정 다이얼로그: 태그 입력
+            # 발행 설정 다이얼로그: 카테고리 + 태그
+            cat = cfg.get("category")
+            if cat:
+                try:
+                    for sel_el in page.locator("select").all():
+                        labels = sel_el.locator("option").all_text_contents()
+                        if any(cat in l for l in labels):
+                            sel_el.select_option(label=next(l for l in labels if cat in l))
+                            print("  카테고리 설정:", cat)
+                            break
+                except Exception as e:
+                    print("  카테고리 선택 생략:", str(e)[:60])
             try:
                 tag_box = page.locator("textarea[placeholder*='태그'], input[placeholder*='태그']").first
                 if tag_box.count():
