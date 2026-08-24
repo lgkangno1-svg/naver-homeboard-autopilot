@@ -26,11 +26,12 @@ def iter_log():
     if not os.path.exists(LOG):
         return
     try:
-        for line in open(LOG, encoding="utf-8"):
-            try:
-                yield json.loads(line)
-            except Exception:
-                continue
+        with open(LOG, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    yield json.loads(line)
+                except Exception:
+                    continue
     except Exception:
         return
 
