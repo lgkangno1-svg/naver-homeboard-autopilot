@@ -79,7 +79,6 @@ def _go_candidates(role="write"):
         else OPENCODE_GO_FALLBACK_MODELS
     )
     candidates = [preferred] + _model_list(raw_fallbacks)
-    # The other role's preferred model is also a useful last Go fallback.
     candidates.append(OPENCODE_GO_MODEL if role == "review" else OPENCODE_GO_REVIEW_MODEL)
     return list(dict.fromkeys(x for x in candidates if x))
 
@@ -217,8 +216,6 @@ def chat(messages, max_tokens=4000, temperature=0.8, timeout=300, role="write"):
         raise RuntimeError("사용 가능한 LLM이 없습니다. .env에 OPENCODE_GO_API_KEY 등을 설정하세요.")
 
     for name, fn in chain:
-        # OpenCode Go errors such as model-unavailable are generally non-transient for the
-        # immediate request, so try each Go model once and move on. Other providers get 2 tries.
         attempts = 1 if name.startswith("opencode-go:") else 2
         for attempt in range(attempts):
             try:
@@ -250,6 +247,26 @@ def _json_candidates(text):
                 break
 
 
+def _coerce_single_json_object(value):
+    """Normalize a model response that should be one JSON object.
+
+    Some chat models occasionally wrap an otherwise valid object in a one-element array,
+    e.g. [{...}]. That shape is safe to recover. Ambiguous arrays or scalar JSON are
+    rejected so callers never crash later with a misleading `.get()` AttributeError.
+    """
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, list):
+        if len(value) == 1 and isinstance(value[0], dict):
+            return value[0]
+        raise ValueError(
+            f"JSON 객체 1개가 필요하지만 배열 {len(value)}개를 받았습니다"
+        )
+    raise ValueError(
+        f"JSON 객체가 필요하지만 {type(value).__name__} 형식을 받았습니다"
+    )
+
+
 def _resolve_role(messages, role):
     """Send explicit scoring/fact-check prompts to the independent reviewer model."""
     if role != "write":
@@ -265,6 +282,7 @@ def _resolve_role(messages, role):
 
 
 def chat_json(messages, max_tokens=6000, temperature=0.7, retries=2, role="write"):
+    """Request and parse one JSON object, repairing common model formatting drift."""
     last = None
     msgs = list(messages)
     effective_role = _resolve_role(msgs, role)
@@ -278,17 +296,24 @@ def chat_json(messages, max_tokens=6000, temperature=0.7, retries=2, role="write
         parsed = None
         for candidate in _json_candidates(out):
             try:
-                parsed = json.loads(candidate)
+                parsed = _coerce_single_json_object(json.loads(candidate))
                 break
             except Exception as e:
                 last = e
+                parsed = None
         if parsed is not None:
             return parsed
         msgs += [
             {"role": "assistant", "content": out[:2500]},
-            {"role": "user", "content": "위 출력은 JSON 파싱에 실패했습니다. 설명/코드펜스 없이 유효한 JSON만 다시 출력하세요."},
+            {
+                "role": "user",
+                "content": (
+                    "위 출력은 요구한 JSON 객체 형식이 아닙니다. "
+                    "배열로 감싸지 말고 설명/코드펜스 없이 JSON 객체 하나만 다시 출력하세요."
+                ),
+            },
         ]
-    raise RuntimeError(f"JSON 파싱 실패: {last}")
+    raise RuntimeError(f"JSON 객체 파싱 실패: {last}")
 
 
 def vision(image_b64_url, prompt, max_tokens=800, temperature=0.2, timeout=90):
