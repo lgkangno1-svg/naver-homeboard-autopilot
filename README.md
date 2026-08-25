@@ -94,9 +94,9 @@ cp .env.example .env
 
 ```env
 OPENCODE_GO_API_KEY=여기에_키
-OPENCODE_GO_MODEL=kimi-k3
+OPENCODE_GO_MODEL=deepseek-v4-flash
 OPENCODE_GO_REVIEW_MODEL=deepseek-v4-flash
-OPENCODE_GO_VISION_MODEL=deepseek-v4-flash-vision-exp
+OPENCODE_GO_VISION_MODEL=deepseek-v4-flash
 PIXABAY_KEY=여기에_키
 NAVER_ID=...
 NAVER_PW=...

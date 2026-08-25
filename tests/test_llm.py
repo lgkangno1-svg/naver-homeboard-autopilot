@@ -29,13 +29,13 @@ class OpenCodeGoResilienceTests(unittest.TestCase):
                     max_tokens=100,
                     temperature=0.7,
                     timeout=3,
-                    model="mimo-v2.5",
+                    model="deepseek-v4-flash",
                 )
             finally:
                 llm.OPENCODE_GO_KEY = old_key
         self.assertEqual(out, "OK")
         payload = post.call_args.kwargs["json"]
-        self.assertEqual(payload["model"], "mimo-v2.5")
+        self.assertEqual(payload["model"], "deepseek-v4-flash")
         self.assertFalse(payload["stream"])
         if not llm.OPENCODE_GO_SEND_TEMPERATURE:
             self.assertNotIn("temperature", payload)
@@ -52,12 +52,12 @@ class OpenCodeGoResilienceTests(unittest.TestCase):
                     max_tokens=100,
                     temperature=0.7,
                     timeout=3,
-                    model="kimi-k3",
+                    model="deepseek-v4-flash",
                 )
         msg = str(cm.exception)
         self.assertIn("HTTP 400", msg)
         self.assertIn("Model is unavailable", msg)
-        self.assertIn("kimi-k3", msg)
+        self.assertIn("deepseek-v4-flash", msg)
 
 
 if __name__ == "__main__":

@@ -63,11 +63,11 @@ if not ENV_PATH.exists():
     ENV_PATH.write_text(
         "NAVER_BLOG_ID=issuemans\n"
         "OPENCODE_GO_API_KEY=\n"
-        "OPENCODE_GO_MODEL=mimo-v2.5-pro\n"
-        "OPENCODE_GO_REVIEW_MODEL=deepseek-v4-pro\n"
+        "OPENCODE_GO_MODEL=deepseek-v4-flash\n"
+        "OPENCODE_GO_REVIEW_MODEL=deepseek-v4-flash\n"
         "OPENCODE_GO_VISION_MODEL=deepseek-v4-flash-vision-exp\n"
         "OPENCODE_GO_BASE_URL=https://opencode.ai/zen/go/v1\n"
-        "OPENCODE_GO_FALLBACK_MODELS=mimo-v2.5-pro,mimo-v2.5,deepseek-v4-pro,kimi-k2.7-code,kimi-k3\n"
+        "OPENCODE_GO_FALLBACK_MODELS=deepseek-v4-flash,deepseek-v4-flash,deepseek-v4-flash,deepseek-v4-flash,deepseek-v4-flash\n"
         "BROWSER_CHANNEL=chrome\n"
         "HEADLESS=0\n",
         encoding="utf-8",
@@ -141,7 +141,7 @@ class BlogWriterApp:
         self.topic_var = tk.StringVar()
         self.api_key_var = tk.StringVar(value=os.getenv("OPENCODE_GO_API_KEY", ""))
         self.blog_id_var = tk.StringVar(value=os.getenv("NAVER_BLOG_ID", "issuemans"))
-        self.writer_model_var = tk.StringVar(value=os.getenv("OPENCODE_GO_MODEL", "mimo-v2.5-pro"))
+        self.writer_model_var = tk.StringVar(value=os.getenv("OPENCODE_GO_MODEL", "deepseek-v4-flash"))
         self.status_var = tk.StringVar(value="준비됨")
         self.api_status_var = tk.StringVar(value="API: 확인 필요")
         self.naver_status_var = tk.StringVar(value="네이버: 확인 필요")
@@ -270,7 +270,7 @@ class BlogWriterApp:
     def apply_settings_runtime(self):
         blog_id = self.blog_id_var.get().strip() or "issuemans"
         key = self.api_key_var.get().strip()
-        model = self.writer_model_var.get().strip() or "mimo-v2.5-pro"
+        model = self.writer_model_var.get().strip() or "deepseek-v4-flash"
         os.environ.update({
             "NAVER_BLOG_ID": blog_id,
             "OPENCODE_GO_API_KEY": key,
@@ -289,7 +289,7 @@ class BlogWriterApp:
             "NAVER_BLOG_ID": blog_id,
             "OPENCODE_GO_API_KEY": key,
             "OPENCODE_GO_MODEL": model,
-            "OPENCODE_GO_REVIEW_MODEL": os.getenv("OPENCODE_GO_REVIEW_MODEL", "deepseek-v4-pro"),
+            "OPENCODE_GO_REVIEW_MODEL": os.getenv("OPENCODE_GO_REVIEW_MODEL", "deepseek-v4-flash"),
             "OPENCODE_GO_VISION_MODEL": os.getenv("OPENCODE_GO_VISION_MODEL", "deepseek-v4-flash-vision-exp"),
             "OPENCODE_GO_BASE_URL": os.getenv("OPENCODE_GO_BASE_URL", "https://opencode.ai/zen/go/v1"),
             "BROWSER_CHANNEL": "chrome",
