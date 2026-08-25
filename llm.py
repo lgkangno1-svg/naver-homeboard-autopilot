@@ -2,12 +2,13 @@
 """Resilient LLM provider chain for blog generation.
 
 Priority:
-1) OpenCode Go model pool (when OPENCODE_GO_API_KEY is set)
+1) OpenCode Go DeepSeek V4 Flash (when OPENCODE_GO_API_KEY is set)
 2) custom OpenAI-compatible endpoint
 3) OpenRouter
 4) local Ollama, only when the configured model actually exists
 
-Secrets must live in .env; never commit API keys.
+OpenCode Go has a hard cost ceiling: no request may select a model other than
+DeepSeek V4 Flash. Secrets must live in .env; never commit API keys.
 """
 import json
 import os
@@ -21,18 +22,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 OPENCODE_GO_KEY = os.getenv("OPENCODE_GO_API_KEY", "").strip()
-OPENCODE_GO_MODEL = os.getenv("OPENCODE_GO_MODEL", "kimi-k3").strip() or "kimi-k3"
-OPENCODE_GO_REVIEW_MODEL = os.getenv("OPENCODE_GO_REVIEW_MODEL", "deepseek-v4-flash").strip() or "deepseek-v4-flash"
-OPENCODE_GO_VISION_MODEL = os.getenv("OPENCODE_GO_VISION_MODEL", "deepseek-v4-flash-vision-exp").strip() or "deepseek-v4-flash-vision-exp"
+OPENCODE_GO_PINNED_MODEL = "deepseek-v4-flash"
+# Keep the public names for compatibility with existing callers/diagnostics, but
+# intentionally ignore model/fallback environment overrides for OpenCode Go.
+OPENCODE_GO_MODEL = OPENCODE_GO_PINNED_MODEL
+OPENCODE_GO_REVIEW_MODEL = OPENCODE_GO_PINNED_MODEL
+OPENCODE_GO_VISION_MODEL = OPENCODE_GO_PINNED_MODEL
 OPENCODE_GO_BASE = os.getenv("OPENCODE_GO_BASE_URL", "https://opencode.ai/zen/go/v1").rstrip("/")
-OPENCODE_GO_FALLBACK_MODELS = os.getenv(
-    "OPENCODE_GO_FALLBACK_MODELS",
-    "deepseek-v4-pro,mimo-v2.5-pro,mimo-v2.5,kimi-k2.7-code",
-)
-OPENCODE_GO_REVIEW_FALLBACK_MODELS = os.getenv(
-    "OPENCODE_GO_REVIEW_FALLBACK_MODELS",
-    "deepseek-v4-pro,mimo-v2.5-pro,mimo-v2.5,kimi-k2.7-code",
-)
+OPENCODE_GO_FALLBACK_MODELS = OPENCODE_GO_PINNED_MODEL
+OPENCODE_GO_REVIEW_FALLBACK_MODELS = OPENCODE_GO_PINNED_MODEL
 OPENCODE_GO_SEND_TEMPERATURE = os.getenv("OPENCODE_GO_SEND_TEMPERATURE", "0") == "1"
 OPENCODE_GO_MAX_OUTPUT = max(256, int(os.getenv("OPENCODE_GO_MAX_OUTPUT", "6000")))
 
@@ -71,16 +69,9 @@ def _model_list(raw):
 
 
 def _go_candidates(role="write"):
-    """Preferred model followed by independent Go fallbacks, de-duplicated."""
-    preferred = OPENCODE_GO_REVIEW_MODEL if role == "review" else OPENCODE_GO_MODEL
-    raw_fallbacks = (
-        OPENCODE_GO_REVIEW_FALLBACK_MODELS
-        if role == "review"
-        else OPENCODE_GO_FALLBACK_MODELS
-    )
-    candidates = [preferred] + _model_list(raw_fallbacks)
-    candidates.append(OPENCODE_GO_MODEL if role == "review" else OPENCODE_GO_REVIEW_MODEL)
-    return list(dict.fromkeys(x for x in candidates if x))
+    """Return the only OpenCode Go model allowed by the cost policy."""
+    del role
+    return [OPENCODE_GO_PINNED_MODEL]
 
 
 def _short_error_response(response, limit=480):
@@ -93,12 +84,14 @@ def _short_error_response(response, limit=480):
 
 
 def _post_opencode_go(messages, max_tokens, temperature, timeout, model=None):
-    """Use a deliberately minimal Chat Completions payload.
+    """Use a minimal Chat Completions payload pinned to DeepSeek V4 Flash.
 
-    Some OpenCode Go upstreams are strict about optional fields. Temperature is therefore
-    omitted by default and can be re-enabled with OPENCODE_GO_SEND_TEMPERATURE=1.
+    The ``model`` argument remains for backwards compatibility but is intentionally
+    ignored. Some OpenCode Go upstreams are strict about optional fields, so
+    temperature is omitted by default and can be re-enabled separately.
     """
-    chosen = model or OPENCODE_GO_MODEL
+    del model
+    chosen = OPENCODE_GO_PINNED_MODEL
     payload = {
         "model": chosen,
         "messages": messages,
@@ -268,7 +261,7 @@ def _coerce_single_json_object(value):
 
 
 def _resolve_role(messages, role):
-    """Send explicit scoring/fact-check prompts to the independent reviewer model."""
+    """Send explicit scoring/fact-check prompts to the review role."""
     if role != "write":
         return role
     text = "\n".join(str(m.get("content", "")) for m in messages if isinstance(m, dict))
@@ -317,7 +310,7 @@ def chat_json(messages, max_tokens=6000, temperature=0.7, retries=2, role="write
 
 
 def vision(image_b64_url, prompt, max_tokens=800, temperature=0.2, timeout=90):
-    """Vision relevance check using OpenCode Go first, then OpenRouter."""
+    """Vision relevance check using Flash-only OpenCode Go first, then OpenRouter."""
     messages = [{"role": "user", "content": [
         {"type": "image_url", "image_url": {"url": image_b64_url}},
         {"type": "text", "text": prompt},
@@ -329,7 +322,7 @@ def vision(image_b64_url, prompt, max_tokens=800, temperature=0.2, timeout=90):
                 max_tokens=max_tokens,
                 temperature=temperature,
                 timeout=timeout,
-                model=OPENCODE_GO_VISION_MODEL,
+                model=OPENCODE_GO_PINNED_MODEL,
             ).strip()
         except Exception as e:
             if not OPENROUTER_KEY:
@@ -353,7 +346,7 @@ def vision(image_b64_url, prompt, max_tokens=800, temperature=0.2, timeout=90):
 
 
 def probe_go():
-    """Cheap connectivity probe for the configured OpenCode Go model pool."""
+    """Cheap connectivity probe for the Flash-only OpenCode Go pool."""
     if not OPENCODE_GO_KEY:
         print("OPENCODE_GO_API_KEY가 설정되지 않았습니다.")
         return 2
