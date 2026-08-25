@@ -1,1 +1,0 @@
-This file exists only to ensure the manual login helper change is exercised by the repository CI compile/test workflow.
