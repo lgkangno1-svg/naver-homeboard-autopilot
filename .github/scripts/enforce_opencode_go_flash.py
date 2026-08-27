@@ -6,51 +6,61 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG = ROOT / ".opencode" / "opencode.json"
-ALLOWED = ("mimo-v2.5", "longcat-2.0", "deepseek-v4-flash")
-DEFAULT_MODEL = "longcat-2.0"
-SMALL_MODEL = "mimo-v2.5"
-AGENT_MODELS = {
-    "build": "longcat-2.0",
-    "plan": "longcat-2.0",
-    "general": "longcat-2.0",
-    "explore": "mimo-v2.5",
-    "reviewer": "deepseek-v4-flash",
-    "investigator": "mimo-v2.5",
-    "code-reviewer": "deepseek-v4-flash",
-    "auto-build": "longcat-2.0",
-    "deep-sol": "longcat-2.0",
-    "fast-luna": "mimo-v2.5",
-    "go-scout": "mimo-v2.5",
-}
 FORBIDDEN = re.compile(r"(?:kimi-k3|deepseek-v4-pro|mimo-v2\.5-pro)", re.IGNORECASE)
 CODE_SUFFIXES = {".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".yml", ".yaml", ".toml"}
 SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "dist", "build", ".next", "coverage"}
 MARKERS = ("OPENCODE_GO", "opencode_go", "OpenCode Go", "opencode-go", "opencode.ai/zen/go")
 
 
+def _is_go_model(value: object) -> bool:
+    return isinstance(value, str) and value.strip().lower().startswith("opencode-go/")
+
+
 def normalize_config() -> bool:
     data = json.loads(CONFIG.read_text(encoding="utf-8")) if CONFIG.exists() else {"$schema": "https://opencode.ai/config.json"}
     before = json.dumps(data, sort_keys=True, ensure_ascii=False)
-    data["model"] = f"opencode-go/{DEFAULT_MODEL}"
-    data["small_model"] = f"opencode-go/{SMALL_MODEL}"
-    data["subagent_depth"] = 1
-    provider = data.setdefault("provider", {})
-    go = provider.setdefault("opencode-go", {})
-    go["whitelist"] = list(ALLOWED)
-    go.pop("blacklist", None)
-    agents = data.setdefault("agent", {})
-    for agent_id, model in AGENT_MODELS.items():
-        current = agents.get(agent_id)
-        if not isinstance(current, dict):
-            current = {}
-            agents[agent_id] = current
-        current["model"] = f"opencode-go/{model}"
+    for key in ("model", "small_model"):
+        if _is_go_model(data.get(key)):
+            data.pop(key, None)
+    provider = data.get("provider")
+    if isinstance(provider, dict):
+        provider.pop("opencode-go", None)
+        if not provider:
+            data.pop("provider", None)
+    agents = data.get("agent")
+    if isinstance(agents, dict):
+        for agent_id in list(agents):
+            current = agents.get(agent_id)
+            if isinstance(current, dict) and _is_go_model(current.get("model")):
+                current.pop("model", None)
+            if isinstance(current, dict) and not current:
+                agents.pop(agent_id, None)
+        if not agents:
+            data.pop("agent", None)
     after = json.dumps(data, sort_keys=True, ensure_ascii=False)
     if before == after and CONFIG.exists():
         return False
     CONFIG.parent.mkdir(parents=True, exist_ok=True)
     CONFIG.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return True
+
+
+def verify_no_go_development_routing() -> None:
+    data = json.loads(CONFIG.read_text(encoding="utf-8")) if CONFIG.exists() else {}
+    violations: list[str] = []
+    for key in ("model", "small_model"):
+        if _is_go_model(data.get(key)):
+            violations.append(key)
+    provider = data.get("provider")
+    if isinstance(provider, dict) and "opencode-go" in provider:
+        violations.append("provider.opencode-go")
+    agents = data.get("agent")
+    if isinstance(agents, dict):
+        for agent_id, current in agents.items():
+            if isinstance(current, dict) and _is_go_model(current.get("model")):
+                violations.append(f"agent.{agent_id}.model")
+    if violations:
+        raise RuntimeError("OpenCode Go development routing remains: " + ", ".join(violations))
 
 
 def scan_forbidden_runtime_models() -> list[str]:
@@ -71,13 +81,14 @@ def scan_forbidden_runtime_models() -> list[str]:
 
 def main() -> int:
     changed = normalize_config()
+    verify_no_go_development_routing()
     hits = scan_forbidden_runtime_models()
     if hits:
         print("Forbidden high-cost OpenCode Go model IDs remain in runtime/config files:")
         for item in hits:
             print(f" - {item}")
         return 2
-    print("OpenCode Go economy policy OK: MiMo for cheap workers, LongCat for build, Flash for review.")
+    print("OpenCode Go development routing disabled; runtime economy-pool checks remain active.")
     if changed:
         print("Normalized .opencode/opencode.json")
     return 0
