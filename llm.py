@@ -2,13 +2,16 @@
 """Resilient LLM provider chain for blog generation.
 
 Priority:
-1) OpenCode Go DeepSeek V4 Flash (when OPENCODE_GO_API_KEY is set)
+1) OpenCode Go economy pool (when OPENCODE_GO_API_KEY is set)
+   - LongCat-2.0 for normal writing/generation
+   - DeepSeek V4 Flash for review/fact-check escalation
+   - MiMo-V2.5 for vision and cheap worker tasks
 2) custom OpenAI-compatible endpoint
 3) OpenRouter
 4) local Ollama, only when the configured model actually exists
 
-OpenCode Go has a hard cost ceiling: no request may select a model other than
-DeepSeek V4 Flash. Secrets must live in .env; never commit API keys.
+OpenCode Go is cost-aware and fail-closed: only the approved economy pool can
+reach the Go endpoint. Secrets must live in .env; never commit API keys.
 """
 import json
 import os
@@ -22,15 +25,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 OPENCODE_GO_KEY = os.getenv("OPENCODE_GO_API_KEY", "").strip()
-OPENCODE_GO_PINNED_MODEL = "deepseek-v4-flash"
-# Keep the public names for compatibility with existing callers/diagnostics, but
-# intentionally ignore model/fallback environment overrides for OpenCode Go.
-OPENCODE_GO_MODEL = OPENCODE_GO_PINNED_MODEL
-OPENCODE_GO_REVIEW_MODEL = OPENCODE_GO_PINNED_MODEL
-OPENCODE_GO_VISION_MODEL = OPENCODE_GO_PINNED_MODEL
+OPENCODE_GO_ALLOWED_MODELS = ("mimo-v2.5", "longcat-2.0", "deepseek-v4-flash")
+OPENCODE_GO_MODEL = os.getenv("OPENCODE_GO_MODEL", "longcat-2.0").strip() or "longcat-2.0"
+OPENCODE_GO_REVIEW_MODEL = os.getenv("OPENCODE_GO_REVIEW_MODEL", "deepseek-v4-flash").strip() or "deepseek-v4-flash"
+OPENCODE_GO_VISION_MODEL = os.getenv("OPENCODE_GO_VISION_MODEL", "mimo-v2.5").strip() or "mimo-v2.5"
 OPENCODE_GO_BASE = os.getenv("OPENCODE_GO_BASE_URL", "https://opencode.ai/zen/go/v1").rstrip("/")
-OPENCODE_GO_FALLBACK_MODELS = OPENCODE_GO_PINNED_MODEL
-OPENCODE_GO_REVIEW_FALLBACK_MODELS = OPENCODE_GO_PINNED_MODEL
+OPENCODE_GO_FALLBACK_MODELS = os.getenv("OPENCODE_GO_FALLBACK_MODELS", "deepseek-v4-flash").strip()
+OPENCODE_GO_REVIEW_FALLBACK_MODELS = os.getenv("OPENCODE_GO_REVIEW_FALLBACK_MODELS", "longcat-2.0").strip()
 OPENCODE_GO_SEND_TEMPERATURE = os.getenv("OPENCODE_GO_SEND_TEMPERATURE", "0") == "1"
 OPENCODE_GO_MAX_OUTPUT = max(256, int(os.getenv("OPENCODE_GO_MAX_OUTPUT", "6000")))
 
@@ -68,10 +69,31 @@ def _model_list(raw):
     return [x.strip() for x in (raw or "").split(",") if x.strip()]
 
 
+def _validate_go_model(model):
+    selected = str(model or "").strip()
+    if selected not in OPENCODE_GO_ALLOWED_MODELS:
+        raise RuntimeError(
+            f"OpenCode Go model blocked by cost policy: {selected or '<empty>'}; "
+            f"allowed={','.join(OPENCODE_GO_ALLOWED_MODELS)}"
+        )
+    return selected
+
+
 def _go_candidates(role="write"):
-    """Return the only OpenCode Go model allowed by the cost policy."""
-    del role
-    return [OPENCODE_GO_PINNED_MODEL]
+    """Return a role-specific cheap-first Go chain, de-duplicated and validated."""
+    if role == "review":
+        preferred = OPENCODE_GO_REVIEW_MODEL
+        raw_fallbacks = OPENCODE_GO_REVIEW_FALLBACK_MODELS
+    else:
+        preferred = OPENCODE_GO_MODEL
+        raw_fallbacks = OPENCODE_GO_FALLBACK_MODELS
+    candidates = [preferred] + _model_list(raw_fallbacks)
+    validated = []
+    for model in candidates:
+        model = _validate_go_model(model)
+        if model not in validated:
+            validated.append(model)
+    return validated
 
 
 def _short_error_response(response, limit=480):
@@ -84,19 +106,8 @@ def _short_error_response(response, limit=480):
 
 
 def _post_opencode_go(messages, max_tokens, temperature, timeout, model=None):
-    """Use a minimal Chat Completions payload pinned to DeepSeek V4 Flash.
-
-    The ``model`` argument remains for backwards compatibility but is intentionally
-    ignored. Some OpenCode Go upstreams are strict about optional fields, so
-    temperature is omitted by default and can be re-enabled separately.
-    """
-    requested_model = (model or OPENCODE_GO_PINNED_MODEL).strip()
-    if requested_model != OPENCODE_GO_PINNED_MODEL:
-        raise RuntimeError(
-            f"OpenCode Go model blocked by cost policy: {requested_model or '<empty>'}; "
-            f"allowed={OPENCODE_GO_PINNED_MODEL}"
-        )
-    chosen = requested_model
+    """Send a minimal Go request after a last-mile economy allowlist check."""
+    chosen = _validate_go_model(model or OPENCODE_GO_MODEL)
     payload = {
         "model": chosen,
         "messages": messages,
@@ -106,11 +117,7 @@ def _post_opencode_go(messages, max_tokens, temperature, timeout, model=None):
     if OPENCODE_GO_SEND_TEMPERATURE:
         payload["temperature"] = temperature
 
-    if payload.get("model") != OPENCODE_GO_PINNED_MODEL:
-        raise RuntimeError("OpenCode Go request blocked immediately before HTTP dispatch")
-
-    if payload.get("model") != OPENCODE_GO_PINNED_MODEL:
-        raise RuntimeError("OpenCode Go request blocked immediately before HTTP dispatch")
+    _validate_go_model(payload.get("model"))
 
     r = requests.post(
         f"{OPENCODE_GO_BASE}/chat/completions",
@@ -321,7 +328,7 @@ def chat_json(messages, max_tokens=6000, temperature=0.7, retries=2, role="write
 
 
 def vision(image_b64_url, prompt, max_tokens=800, temperature=0.2, timeout=90):
-    """Vision relevance check using Flash-only OpenCode Go first, then OpenRouter."""
+    """Vision relevance check using cheap MiMo-V2.5 first, then OpenRouter."""
     messages = [{"role": "user", "content": [
         {"type": "image_url", "image_url": {"url": image_b64_url}},
         {"type": "text", "text": prompt},
@@ -333,7 +340,7 @@ def vision(image_b64_url, prompt, max_tokens=800, temperature=0.2, timeout=90):
                 max_tokens=max_tokens,
                 temperature=temperature,
                 timeout=timeout,
-                model=OPENCODE_GO_PINNED_MODEL,
+                model=OPENCODE_GO_VISION_MODEL,
             ).strip()
         except Exception as e:
             if not OPENROUTER_KEY:
@@ -357,14 +364,15 @@ def vision(image_b64_url, prompt, max_tokens=800, temperature=0.2, timeout=90):
 
 
 def probe_go():
-    """Cheap connectivity probe for the Flash-only OpenCode Go pool."""
+    """Cheap connectivity probe for the role-routed OpenCode Go economy pool."""
     if not OPENCODE_GO_KEY:
         print("OPENCODE_GO_API_KEY가 설정되지 않았습니다.")
         return 2
     print("OpenCode Go endpoint:", OPENCODE_GO_BASE)
-    print("모델 후보:", _go_candidates("write"))
+    print("write 모델 후보:", _go_candidates("write"))
+    print("review 모델 후보:", _go_candidates("review"))
     ok = []
-    for model in _go_candidates("write"):
+    for model in dict.fromkeys(_go_candidates("write") + _go_candidates("review") + [OPENCODE_GO_VISION_MODEL]):
         try:
             out = _post_opencode_go(
                 [{"role": "user", "content": "Reply exactly with OK"}],
