@@ -7,8 +7,8 @@ PINNED = "deepseek-v4-flash"
 ROOT = Path(__file__).resolve().parents[2]
 SELF = Path(__file__).resolve()
 EXCLUDED_DIRS = {".git", ".venv", "venv", "node_modules", "dist", "build", ".next", "coverage"}
-TEXT_SUFFIXES = {".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".yml", ".yaml", ".env", ".example", ".md", ".toml"}
-MARKERS = ("OPENCODE_GO", "opencode_go", "OpenCode Go", "opencode.ai/zen/go")
+TEXT_SUFFIXES = {".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".yml", ".yaml", ".env", ".example", ".toml"}
+MARKERS = ("OPENCODE_GO", "opencode_go", "OpenCode Go", "opencode-go", "opencode.ai/zen/go")
 
 ENV_KEYS = (
     "OPENCODE_GO_MODEL",
@@ -19,16 +19,18 @@ ENV_KEYS = (
     "AI_MODEL_PRIMARY",
     "AI_MODEL_FAST",
 )
-
 ASSIGNMENT_NAMES = (
     "PINNED_MODEL",
     "PINNED_OPENCODE_GO_MODEL",
     "OPENCODE_GO_PINNED_MODEL",
     "OTTO_DEFAULT_MODEL",
 )
-
 FORBIDDEN_TOKEN = re.compile(
     r"(?:deepseek-v4-pro|gpt-5\.6-luna|kimi-[A-Za-z0-9._-]+|mimo-[A-Za-z0-9._-]+)",
+    re.IGNORECASE,
+)
+NON_FLASH_GO_MODEL = re.compile(
+    r"opencode-go/(?!deepseek-v4-flash(?:[\"'\s,}\]]|$))[A-Za-z0-9._-]+",
     re.IGNORECASE,
 )
 
@@ -49,6 +51,7 @@ def enforce(text: str) -> str:
     if not any(marker in text for marker in MARKERS):
         return text
     out = FORBIDDEN_TOKEN.sub(PINNED, text)
+    out = NON_FLASH_GO_MODEL.sub(f"opencode-go/{PINNED}", out)
     env_names = "|".join(re.escape(name) for name in ENV_KEYS)
     out = re.sub(rf"(?m)^((?:{env_names})=)[^\n#]*(.*)$", rf"\1{PINNED}\2", out)
     assignment_names = "|".join(re.escape(name) for name in ASSIGNMENT_NAMES)
