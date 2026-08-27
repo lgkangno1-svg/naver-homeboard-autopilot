@@ -1,4 +1,4 @@
-name: OpenCode Go Flash Guard
+name: OpenCode Go Development Guard
 
 on:
   push:
@@ -18,17 +18,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Enforce Flash-only OpenCode Go policy
+      - name: Remove repository OpenCode Go development routing
         run: python .github/scripts/enforce_opencode_go_flash.py
       - name: Commit automatic policy fix
         shell: bash
         run: |
           if git diff --quiet; then
-            echo "No OpenCode Go model-policy changes needed."
+            echo "No OpenCode Go development-policy changes needed."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "chore: enforce OpenCode Go Flash ceiling"
+          git commit -m "chore: enforce no OpenCode Go development routing"
           git push
