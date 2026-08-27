@@ -90,8 +90,13 @@ def _post_opencode_go(messages, max_tokens, temperature, timeout, model=None):
     ignored. Some OpenCode Go upstreams are strict about optional fields, so
     temperature is omitted by default and can be re-enabled separately.
     """
-    del model
-    chosen = OPENCODE_GO_PINNED_MODEL
+    requested_model = (model or OPENCODE_GO_PINNED_MODEL).strip()
+    if requested_model != OPENCODE_GO_PINNED_MODEL:
+        raise RuntimeError(
+            f"OpenCode Go model blocked by cost policy: {requested_model or '<empty>'}; "
+            f"allowed={OPENCODE_GO_PINNED_MODEL}"
+        )
+    chosen = requested_model
     payload = {
         "model": chosen,
         "messages": messages,
@@ -100,6 +105,9 @@ def _post_opencode_go(messages, max_tokens, temperature, timeout, model=None):
     }
     if OPENCODE_GO_SEND_TEMPERATURE:
         payload["temperature"] = temperature
+
+    if payload.get("model") != OPENCODE_GO_PINNED_MODEL:
+        raise RuntimeError("OpenCode Go request blocked immediately before HTTP dispatch")
 
     r = requests.post(
         f"{OPENCODE_GO_BASE}/chat/completions",
