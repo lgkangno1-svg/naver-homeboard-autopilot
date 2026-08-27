@@ -1,13 +1,11 @@
 # Repository agent policy
 
-## OpenCode Go cost-aware routing
+## Development execution policy
 
-Use only the checked-in OpenCode Go economy pool:
+Repository development is performed directly by the active chat/Codex development session. Do not use OpenCode Go for coding, implementation, planning, debugging, refactoring, code review, test repair, repository exploration for development, architecture work, or unattended development loops.
 
-- `opencode-go/mimo-v2.5` for exploration, investigation, scouting, repetitive checks, summaries, and other low-risk sub-agent work;
-- `opencode-go/longcat-2.0` as the default/build model for coding, planning, general engineering, auto-build, and deeper implementation work;
-- `opencode-go/deepseek-v4-flash` for reviewer/code-reviewer roles, high-risk decisions, or escalation when lower-cost work fails tests or quality gates.
+The checked-in `.opencode/opencode.json` intentionally contains no `opencode-go/*` development model routing. Do not reintroduce Go models into build/general/plan/reviewer/code-reviewer/investigator/auto-build/deep agents or equivalent sub-agents.
 
-Do not use Flash by default when MiMo or LongCat is adequate. `Kimi K3`, DeepSeek Pro-tier models, MiMo Pro-tier models, and all OpenCode Go models outside the allowlist are forbidden for unattended loops unless the repository owner explicitly changes the policy after a cost/quality review.
+OpenCode Go may still be used by application/runtime automation when the product itself intentionally calls the Go API for non-development work such as content generation, classification, extraction, research assistance, or other business automation. Runtime use must remain cost-aware and bounded; it does not authorize delegating repository development to OpenCode Go.
 
-Escalate only within the allowlist. Immediately before a paid OpenCode Go request, validate that the final model is allowed; otherwise fail closed without sending the request. Keep `.opencode/opencode.json` aligned with this routing.
+When development is requested, perform the work directly in the chat/Codex environment and validate it with the repository's normal tests and checks.
