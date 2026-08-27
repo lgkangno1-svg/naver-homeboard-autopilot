@@ -109,6 +109,9 @@ def _post_opencode_go(messages, max_tokens, temperature, timeout, model=None):
     if payload.get("model") != OPENCODE_GO_PINNED_MODEL:
         raise RuntimeError("OpenCode Go request blocked immediately before HTTP dispatch")
 
+    if payload.get("model") != OPENCODE_GO_PINNED_MODEL:
+        raise RuntimeError("OpenCode Go request blocked immediately before HTTP dispatch")
+
     r = requests.post(
         f"{OPENCODE_GO_BASE}/chat/completions",
         headers={
