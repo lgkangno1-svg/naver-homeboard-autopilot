@@ -65,6 +65,26 @@ def enforce(text: str) -> str:
         rf'\1\2"{PINNED}"',
         out,
     )
+
+    # Naver runtime last-mile hardening: an explicit unsafe caller model must
+    # stop before HTTP dispatch rather than being silently ignored.
+    out = out.replace(
+        "    del model\n    chosen = OPENCODE_GO_PINNED_MODEL\n    payload = {",
+        "    requested_model = (model or OPENCODE_GO_PINNED_MODEL).strip()\n"
+        "    if requested_model != OPENCODE_GO_PINNED_MODEL:\n"
+        "        raise RuntimeError(\n"
+        "            f\"OpenCode Go model blocked by cost policy: {requested_model or '<empty>'}; \"\n"
+        "            f\"allowed={OPENCODE_GO_PINNED_MODEL}\"\n"
+        "        )\n"
+        "    chosen = requested_model\n"
+        "    payload = {",
+    )
+    out = out.replace(
+        "    r = requests.post(\n        f\"{OPENCODE_GO_BASE}/chat/completions\",",
+        "    if payload.get(\"model\") != OPENCODE_GO_PINNED_MODEL:\n"
+        "        raise RuntimeError(\"OpenCode Go request blocked immediately before HTTP dispatch\")\n\n"
+        "    r = requests.post(\n        f\"{OPENCODE_GO_BASE}/chat/completions\",",
+    )
     return out
 
 
