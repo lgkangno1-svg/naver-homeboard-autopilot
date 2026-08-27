@@ -1,112 +1,85 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
-PINNED = "deepseek-v4-flash"
 ROOT = Path(__file__).resolve().parents[2]
-SELF = Path(__file__).resolve()
-EXCLUDED_DIRS = {".git", ".venv", "venv", "node_modules", "dist", "build", ".next", "coverage"}
-TEXT_SUFFIXES = {".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".yml", ".yaml", ".env", ".example", ".toml"}
+CONFIG = ROOT / ".opencode" / "opencode.json"
+ALLOWED = ("mimo-v2.5", "longcat-2.0", "deepseek-v4-flash")
+DEFAULT_MODEL = "longcat-2.0"
+SMALL_MODEL = "mimo-v2.5"
+AGENT_MODELS = {
+    "build": "longcat-2.0",
+    "plan": "longcat-2.0",
+    "general": "longcat-2.0",
+    "explore": "mimo-v2.5",
+    "reviewer": "deepseek-v4-flash",
+    "investigator": "mimo-v2.5",
+    "code-reviewer": "deepseek-v4-flash",
+    "auto-build": "longcat-2.0",
+    "deep-sol": "longcat-2.0",
+    "fast-luna": "mimo-v2.5",
+    "go-scout": "mimo-v2.5",
+}
+FORBIDDEN = re.compile(r"(?:kimi-k3|deepseek-v4-pro|mimo-v2\.5-pro)", re.IGNORECASE)
+CODE_SUFFIXES = {".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".yml", ".yaml", ".toml"}
+SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "dist", "build", ".next", "coverage"}
 MARKERS = ("OPENCODE_GO", "opencode_go", "OpenCode Go", "opencode-go", "opencode.ai/zen/go")
 
-ENV_KEYS = (
-    "OPENCODE_GO_MODEL",
-    "OPENCODE_GO_REVIEW_MODEL",
-    "OPENCODE_GO_VISION_MODEL",
-    "OPENCODE_GO_FALLBACK_MODELS",
-    "OPENCODE_GO_REVIEW_FALLBACK_MODELS",
-    "AI_MODEL_PRIMARY",
-    "AI_MODEL_FAST",
-)
-ASSIGNMENT_NAMES = (
-    "PINNED_MODEL",
-    "PINNED_OPENCODE_GO_MODEL",
-    "OPENCODE_GO_PINNED_MODEL",
-    "OTTO_DEFAULT_MODEL",
-)
-FORBIDDEN_TOKEN = re.compile(
-    r"(?:deepseek-v4-pro|gpt-5\.6-luna|kimi-[A-Za-z0-9._-]+|mimo-[A-Za-z0-9._-]+)",
-    re.IGNORECASE,
-)
-NON_FLASH_GO_MODEL = re.compile(
-    r"opencode-go/(?!deepseek-v4-flash(?:[\"'\s,}\]]|$))[A-Za-z0-9._-]+",
-    re.IGNORECASE,
-)
 
-
-def eligible(path: Path) -> bool:
-    if path.resolve() == SELF:
+def normalize_config() -> bool:
+    data = json.loads(CONFIG.read_text(encoding="utf-8")) if CONFIG.exists() else {"$schema": "https://opencode.ai/config.json"}
+    before = json.dumps(data, sort_keys=True, ensure_ascii=False)
+    data["model"] = f"opencode-go/{DEFAULT_MODEL}"
+    data["small_model"] = f"opencode-go/{SMALL_MODEL}"
+    data["subagent_depth"] = 1
+    provider = data.setdefault("provider", {})
+    go = provider.setdefault("opencode-go", {})
+    go["whitelist"] = list(ALLOWED)
+    go.pop("blacklist", None)
+    agents = data.setdefault("agent", {})
+    for agent_id, model in AGENT_MODELS.items():
+        current = agents.get(agent_id)
+        if not isinstance(current, dict):
+            current = {}
+            agents[agent_id] = current
+        current["model"] = f"opencode-go/{model}"
+    after = json.dumps(data, sort_keys=True, ensure_ascii=False)
+    if before == after and CONFIG.exists():
         return False
-    if path.as_posix().endswith(".github/workflows/opencode-go-flash-guard.yml"):
-        return False
-    if any(part in EXCLUDED_DIRS for part in path.parts):
-        return False
-    if path.name.startswith(".env"):
-        return True
-    return path.suffix.lower() in TEXT_SUFFIXES
+    CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return True
 
 
-def enforce(text: str) -> str:
-    if not any(marker in text for marker in MARKERS):
-        return text
-    out = FORBIDDEN_TOKEN.sub(PINNED, text)
-    out = NON_FLASH_GO_MODEL.sub(f"opencode-go/{PINNED}", out)
-    env_names = "|".join(re.escape(name) for name in ENV_KEYS)
-    out = re.sub(rf"(?m)^((?:{env_names})=)[^\n#]*(.*)$", rf"\1{PINNED}\2", out)
-    assignment_names = "|".join(re.escape(name) for name in ASSIGNMENT_NAMES)
-    out = re.sub(
-        rf"\b({assignment_names})(\s*(?::[^=\n]+)?=\s*)['\"][^'\"]+['\"]",
-        rf'\1\2"{PINNED}"',
-        out,
-    )
-    out = re.sub(
-        r"\b(ai_model_primary|ai_model_fast)(\s*:\s*str\s*=\s*)['\"][^'\"]+['\"]",
-        rf'\1\2"{PINNED}"',
-        out,
-    )
-
-    # Naver runtime last-mile hardening: an explicit unsafe caller model must
-    # stop before HTTP dispatch rather than being silently ignored.
-    out = out.replace(
-        "    del model\n    chosen = OPENCODE_GO_PINNED_MODEL\n    payload = {",
-        "    requested_model = (model or OPENCODE_GO_PINNED_MODEL).strip()\n"
-        "    if requested_model != OPENCODE_GO_PINNED_MODEL:\n"
-        "        raise RuntimeError(\n"
-        "            f\"OpenCode Go model blocked by cost policy: {requested_model or '<empty>'}; \"\n"
-        "            f\"allowed={OPENCODE_GO_PINNED_MODEL}\"\n"
-        "        )\n"
-        "    chosen = requested_model\n"
-        "    payload = {",
-    )
-    out = out.replace(
-        "    r = requests.post(\n        f\"{OPENCODE_GO_BASE}/chat/completions\",",
-        "    if payload.get(\"model\") != OPENCODE_GO_PINNED_MODEL:\n"
-        "        raise RuntimeError(\"OpenCode Go request blocked immediately before HTTP dispatch\")\n\n"
-        "    r = requests.post(\n        f\"{OPENCODE_GO_BASE}/chat/completions\",",
-    )
-    return out
+def scan_forbidden_runtime_models() -> list[str]:
+    hits: list[str] = []
+    for path in ROOT.rglob("*"):
+        if not path.is_file() or any(part in SKIP_DIRS for part in path.parts):
+            continue
+        if path == CONFIG or path.resolve() == Path(__file__).resolve() or path.suffix.lower() not in CODE_SUFFIXES:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        if any(marker in text for marker in MARKERS) and FORBIDDEN.search(text):
+            hits.append(str(path.relative_to(ROOT)))
+    return hits
 
 
 def main() -> int:
-    changed: list[str] = []
-    for path in ROOT.rglob("*"):
-        if not path.is_file() or not eligible(path):
-            continue
-        try:
-            original = path.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
-            continue
-        fixed = enforce(original)
-        if fixed != original:
-            path.write_text(fixed, encoding="utf-8")
-            changed.append(str(path.relative_to(ROOT)))
-    if changed:
-        print("OpenCode Go Flash policy auto-fixed:")
-        for item in changed:
+    changed = normalize_config()
+    hits = scan_forbidden_runtime_models()
+    if hits:
+        print("Forbidden high-cost OpenCode Go model IDs remain in runtime/config files:")
+        for item in hits:
             print(f" - {item}")
-    else:
-        print("OpenCode Go Flash policy already satisfied.")
+        return 2
+    print("OpenCode Go economy policy OK: MiMo for cheap workers, LongCat for build, Flash for review.")
+    if changed:
+        print("Normalized .opencode/opencode.json")
     return 0
 
 
